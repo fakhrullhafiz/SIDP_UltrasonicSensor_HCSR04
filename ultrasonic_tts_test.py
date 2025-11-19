@@ -1,13 +1,27 @@
 import RPi.GPIO as GPIO
 import time
 import os
+import datetime
+from zoneinfo import ZoneInfo
+
+# === Firebase Setup ===
+import firebase_admin
+from firebase_admin import credentials, db
+
+cred = credentials.Certificate("/home/coe/firebase/firebase-key.json")
+firebase_admin.initialize_app(cred, {
+    "databaseURL": "https://sidp-5fcae-default-rtdb.asia-southeast1.firebasedatabase.app/"
+})
+root = db.reference("ultrasonicDB")
+print("Firebase initialized successfully (Ultrasonic)!")
+
+malaysia_tz = ZoneInfo("Asia/Kuala_Lumpur")
 
 # === GPIO SETUP ===
 GPIO.setmode(GPIO.BOARD)
 
-# Pins for the ultrasonic sensor
-TRIG = 11  # GPIO 17
-ECHO = 12  # GPIO 18
+TRIG = 11
+ECHO = 12
 
 GPIO.setup(TRIG, GPIO.OUT)
 GPIO.setup(ECHO, GPIO.IN)
@@ -18,7 +32,6 @@ time.sleep(2)
 
 # === FUNCTION TO MEASURE DISTANCE ===
 def measure_distance():
-    # Send a 10μs pulse
     GPIO.output(TRIG, True)
     time.sleep(0.00001)
     GPIO.output(TRIG, False)
@@ -26,31 +39,31 @@ def measure_distance():
     pulse_start = time.time()
     pulse_end = time.time()
 
-    # Wait for echo to go high
     while GPIO.input(ECHO) == 0:
         pulse_start = time.time()
 
-    # Wait for echo to go low
     while GPIO.input(ECHO) == 1:
         pulse_end = time.time()
 
     pulse_duration = pulse_end - pulse_start
-    distance = pulse_duration * 17150  # Convert to cm
-    distance = round(distance, 2)
-    return distance
-
+    distance = pulse_duration * 17150
+    return round(distance, 2)
 
 # === MAIN LOOP ===
 try:
     last_message = None
     last_announce_time = 0
-    announce_interval = 2  # seconds between TTS messages
+    announce_interval = 2  # seconds
 
     while True:
         distance = measure_distance()
-        print(f"Distance: {distance} cm")
+        print(f"Distance: {distance} cm")  # <-- timestamp NOT printed
 
         current_time = time.time()
+
+        # Malaysia timestamp for Firebase only
+        now = datetime.datetime.now(malaysia_tz)
+        timestamp = now.strftime("%Y/%m/%d %H:%M:%S")
 
         # === Threshold logic ===
         if distance < 50:
@@ -62,11 +75,21 @@ try:
         else:
             message = None
 
-        # === Speak only if message changes or interval passes ===
+        # === TTS logic ===
         if message and (message != last_message or current_time - last_announce_time > announce_interval):
             os.system(f"espeak '{message}'")
             last_message = message
             last_announce_time = current_time
+
+        # === Firebase upload WITH timestamp (NOT printed) ===
+        firebase_data = {
+            "timestamp": timestamp,
+            "distance_cm": distance,
+            "message": message if message else "None"
+        }
+
+        root.push(firebase_data)
+        print("Uploaded to Firebase")  # <-- timestamp not shown
 
         time.sleep(1)
 

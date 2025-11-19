@@ -168,6 +168,7 @@ try:
         if firebase_objects:  # Only push if there are detections
             root.push(data)
             print(f"[{timestamp}] Data uploaded successfully!")
+            time.sleep(1)
 
         # Display FPS
         frame_count += 1
