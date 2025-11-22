@@ -21,7 +21,7 @@ ser = serial.Serial(port, baudrate=9600, timeout=1)
 # ============================
 cred = credentials.Certificate("sidp-5fcae-firebase-adminsdk-fbsvc-8989d44269.json")
 firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://sidp-5fcae-default-rtdb.firebaseio.com/"
+    "databaseURL": "https://console.firebase.google.com/u/0/project/sidp-5fcae/database/sidp-5fcae-default-rtdb/data/~2F"
 })
 
 def push_sos_to_firebase(lat, lng):
