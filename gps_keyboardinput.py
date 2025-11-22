@@ -10,7 +10,7 @@ from firebase_admin import credentials, db
 # ============================
 # PUT YOUR GOOGLE API KEY HERE
 # ============================
-API_KEY = "AIzaSyC3wbCxpdu5gBjjixsDlIR1N-hFSgR2xp4"
+API_KEY = "YOUR_API_KEY"
 
 # -------- GPS Serial Port --------
 port = "/dev/serial0"
@@ -21,7 +21,7 @@ ser = serial.Serial(port, baudrate=9600, timeout=1)
 # ============================
 cred = credentials.Certificate("sidp-5fcae-firebase-adminsdk-fbsvc-8989d44269.json")
 firebase_admin.initialize_app(cred, {
-    "databaseURL": "https://console.firebase.google.com/u/0/project/sidp-5fcae/database/sidp-5fcae-default-rtdb/data/~2F"
+    "databaseURL": "https://sidp-5fcae-default-rtdb.firebaseio.com/"
 })
 
 def push_sos_to_firebase(lat, lng):
@@ -33,7 +33,6 @@ def push_sos_to_firebase(lat, lng):
     }
     sos_ref.set(payload)
     print("[Prime]: SOS pushed to Firebase.")
-
 
 # ============================
 # TTS ENGINE SETUP
@@ -47,44 +46,75 @@ def speak(text):
     engine.runAndWait()
 
 # ============================
-# TEXT INPUT FUNCTION (FOR TESTING)
+# TEXT INPUT FUNCTION
 # ============================
 def listen_for_command():
     command = input("[Type command]: ")
     return command.lower() if command else None
 
 # ============================
-# GET ONE GPS FIX
+# GET ONE GPS FIX WITH TIMEOUT
 # ============================
-def get_gps_coordinates():
+def get_gps_coordinates(timeout=10, round_coords=False):
+    """Return latitude and longitude, or None if GPS fix fails after timeout.
+       If round_coords=True, round to 3 decimals for display."""
+    start = time.time()
     while True:
-        line = ser.readline().decode('ascii', errors='replace').strip()
+        if time.time() - start > timeout:
+            return None, None  # GPS failed
 
-        if line.startswith('$GPGGA') or line.startswith('$GPRMC'):
-            try:
+        try:
+            line = ser.readline().decode('ascii', errors='replace').strip()
+            if line.startswith('$GPGGA') or line.startswith('$GPRMC'):
                 msg = pynmea2.parse(line)
                 lat = getattr(msg, 'latitude', None)
                 lng = getattr(msg, 'longitude', None)
-
                 if lat and lng:
+                    if round_coords:
+                        return round(lat, 3), round(lng, 3)
                     return lat, lng
-            except:
-                continue
+        except Exception as e:
+            print(f"[GPS ERROR] {e}")
+            continue
 
 # ============================
 # GOOGLE REVERSE GEOCODING
 # ============================
 def reverse_geocode(lat, lng):
-    url = (
-        f"https://maps.googleapis.com/maps/api/geocode/json?"
-        f"latlng={lat},{lng}&key={API_KEY}"
-    )
-    response = requests.get(url)
-    data = response.json()
+    try:
+        url = (
+            f"https://maps.googleapis.com/maps/api/geocode/json?"
+            f"latlng={lat},{lng}&key={API_KEY}"
+        )
+        response = requests.get(url)
+        data = response.json()
 
-    if data["status"] == "OK":
-        return data["results"][0]["formatted_address"]
-    return "[ERROR] Reverse geocoding failed"
+        if data["status"] == "OK":
+            return data["results"][0]["formatted_address"]
+        else:
+            print(f"[Geocode ERROR] Status: {data['status']}, Message: {data.get('error_message')}")
+            return "[ERROR] Reverse geocoding failed"
+    except Exception as e:
+        print(f"[Geocode EXCEPTION] {e}")
+        return "[ERROR] Reverse geocoding failed"
+
+# ============================
+# SOS FEATURE
+# ============================
+def send_sos():
+    speak("SOS detected. Sending emergency alert now.")
+    
+    lat, lng = get_gps_coordinates(timeout=10, round_coords=False)
+    if lat is None:
+        speak("Could not get a GPS fix. SOS not sent.")
+        return
+    
+    try:
+        push_sos_to_firebase(lat, lng)
+        speak(f"Your SOS has been sent. Help is on the way. Coordinates: {lat}, {lng}")
+    except Exception as e:
+        print(f"[Firebase ERROR] {e}")
+        speak("Failed to send SOS to Firebase. Please try again.")
 
 # ============================
 # COMMAND HANDLER
@@ -96,21 +126,17 @@ def handle_command(command):
     # ------------------- LOCATION -------------------
     if "location" in command:
         speak("Let me get your current coordinates.")
-        lat, lng = get_gps_coordinates()
-
+        lat, lng = get_gps_coordinates(timeout=10, round_coords=True)
+        if lat is None:
+            speak("Could not get GPS fix. Try moving to a location with better signal.")
+            return
         speak(f"Your coordinates are latitude {lat} and longitude {lng}.")
-
         address = reverse_geocode(lat, lng)
         speak(f"You are currently at: {address}")
 
     # ------------------- SOS FEATURE -------------------
     elif "sos" in command or "help" in command:
-        speak("SOS detected. Sending emergency alert now.")
-        lat, lng = get_gps_coordinates()
-
-        push_sos_to_firebase(lat, lng)
-
-        speak("Your SOS has been sent. Help is on the way.")
+        send_sos()
 
 # ============================
 # MAIN LOOP
@@ -121,7 +147,10 @@ while True:
     try:
         command = listen_for_command()
         handle_command(command)
-
     except KeyboardInterrupt:
         speak("Shutting down. Goodbye.")
         break
+    except Exception as e:
+        # Catch all unexpected exceptions so Prime never crashes
+        print(f"[ERROR] {e}")
+        speak("An error occurred, but I am still running.")
