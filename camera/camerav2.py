@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""
-Optimized camera + YOLOv8 detection + async Firebase upload + TTS.
-
-Design:
-- capture_thread: continuously grabs latest frame and writes to shared frame slot (overwrites old).
-- detector_thread: runs inference at a throttled rate (DETECTION_INTERVAL). Writes latest detections to shared state
-  and enqueues upload payloads to upload_queue.
-- uploader_thread: pushes detection payloads to Firebase asynchronously.
-- tts_thread: speaks announcements from tts_queue.
-- main thread: shows preview window using the latest shared frame and draws last detections.
-
-All numeric data uploaded to Firebase are converted to native Python types to avoid JSON serialization errors.
-"""
 
 import time
 import datetime
