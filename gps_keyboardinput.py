@@ -4,6 +4,8 @@ import requests
 import time
 import math
 import pyttsx3
+import firebase_admin
+from firebase_admin import credentials, db
 
 # ============================
 # PUT YOUR GOOGLE API KEY HERE
@@ -13,6 +15,25 @@ API_KEY = "AIzaSyC3wbCxpdu5gBjjixsDlIR1N-hFSgR2xp4"
 # -------- GPS Serial Port --------
 port = "/dev/serial0"
 ser = serial.Serial(port, baudrate=9600, timeout=1)
+
+# ============================
+# FIREBASE INITIALIZATION
+# ============================
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred, {
+    "databaseURL": "https://sidp-5fcae-default-rtdb.firebaseio.com/"
+})
+
+def push_sos_to_firebase(lat, lng):
+    sos_ref = db.reference("/sos")
+    payload = {
+        "latitude": lat,
+        "longitude": lng,
+        "timestamp": time.time()
+    }
+    sos_ref.set(payload)
+    print("[Prime]: SOS pushed to Firebase.")
+
 
 # ============================
 # TTS ENGINE SETUP
@@ -72,18 +93,24 @@ def handle_command(command):
     if command is None:
         return
 
+    # ------------------- LOCATION -------------------
     if "location" in command:
         speak("Let me get your current coordinates.")
         lat, lng = get_gps_coordinates()
 
         speak(f"Your coordinates are latitude {lat} and longitude {lng}.")
 
-        # optional: reverse geocode
         address = reverse_geocode(lat, lng)
         speak(f"You are currently at: {address}")
 
-    elif "sos" in command:
-        speak("SOS feature is not implemented yet.")
+    # ------------------- SOS FEATURE -------------------
+    elif "sos" in command or "help" in command:
+        speak("SOS detected. Sending emergency alert now.")
+        lat, lng = get_gps_coordinates()
+
+        push_sos_to_firebase(lat, lng)
+
+        speak("Your SOS has been sent. Help is on the way.")
 
 # ============================
 # MAIN LOOP
