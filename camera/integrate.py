@@ -231,7 +231,7 @@ ultrasonic_thread.start()
 model = YOLO("yolov8n.pt")
 allowed_classes = {
     'person', 'car', 'cat', 'dog', 'stop sign',
-    'toilet', 'chair', 'bed', 'tv', 'dining table', 'vase'
+    'toilet', 'chair', 'bed', 'tv', 'dining table'
 }
 ANNOUNCE_COOLDOWN = 5.0
 last_announced = {}
