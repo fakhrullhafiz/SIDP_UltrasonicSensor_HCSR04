@@ -10,7 +10,7 @@ from firebase_admin import credentials, db
 # ============================
 # PUT YOUR GOOGLE API KEY HERE
 # ============================
-API_KEY = "YOUR_API_KEY"
+API_KEY = "AIzaSyC3wbCxpdu5gBjjixsDlIR1N-hFSgR2xp4"
 
 # -------- GPS Serial Port --------
 port = "/dev/serial0"
